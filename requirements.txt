@@ -1,0 +1,16 @@
+# Computer Vision and Hand Tracking
+opencv-python
+mediapipe
+
+# Mouse and GUI Control
+pyautogui
+
+# Windows Volume Control
+pycaw
+
+# Core Dependencies (automatically installed with above packages)
+numpy
+pillow
+
+# Optional: For better performance
+# opencv-contrib-python==4.10.0.84  # Uncomment if you need additional OpenCV features
