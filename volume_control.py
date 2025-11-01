@@ -8,199 +8,302 @@ from comtypes import CLSCTX_ALL
 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 import math
 import altair as alt
+import time
+import pythoncom
 
+# -------------------- PAGE CONFIG --------------------
+st.set_page_config(page_title="Gesture Volume Dashboard", layout="wide")
 
-# ---------------- Streamlit UI Setup ----------------
-st.set_page_config(layout="wide", page_title="Gesture Volume Controller")
+# -------------------- LOGIN PAGE --------------------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
 
-# 🎨 CHANGE 1: Bright Gradient Theme (Purple–Blue)
-st.markdown("""
+if not st.session_state.logged_in:
+    st.markdown("""
+        <style>
+            body, .stApp {
+                background: linear-gradient(120deg, #3B82F6, #9333EA);
+                font-family: 'Poppins', sans-serif;
+                color: white;
+                text-align: center;
+            }
+            .login-box {
+                background-color: rgba(255,255,255,0.15);
+                padding: 40px 50px;
+                border-radius: 20px;
+                width: 400px;
+                margin: 10% auto;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            }
+            h1 {
+                color: white;
+                font-weight: 900;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+        <div class='login-box'>
+            <h1>🎵 Gesture Volume Controller</h1>
+            <p>Login to access the dashboard</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    username = st.text_input("👤 Username", placeholder="Enter any username")
+    password = st.text_input("🔒 Password", placeholder="Enter any password", type="password")
+
+    if st.button("Login 🚀", use_container_width=True):
+        st.session_state.logged_in = True
+        st.success("Login successful! Redirecting...")
+        st.rerun()
+    st.stop()
+
+# -------------------- SIDEBAR SETTINGS --------------------
+st.sidebar.title("⚙️ Settings")
+theme = st.sidebar.radio("Choose Theme", ["🌞 Light Mode", "🌙 Dark Mode"])
+
+if st.sidebar.button("🚪 Logout"):
+    st.session_state.logged_in = False
+    st.session_state.run_camera = False
+    st.session_state.pause_camera = False
+    st.rerun()
+
+# -------------------- THEME CONFIG --------------------
+if theme == "🌙 Dark Mode":
+    bg_color = "#0F172A"
+    text_color = "#F1F5F9"
+    card_bg = "#1E293B"
+    accent = "#3B82F6"
+    border = "#475569"
+    gradient_bg = "linear-gradient(90deg, #1E3A8A, #3B82F6, #1E40AF)"
+else:
+    bg_color = "#F9FAFB"
+    text_color = "#111827"
+    card_bg = "#E5E7EB"
+    accent = "#2563EB"
+    border = "#CBD5E1"
+    gradient_bg = "linear-gradient(90deg, #60A5FA, #3B82F6, #2563EB)"
+
+# -------------------- STYLING --------------------
+st.markdown(f"""
     <style>
-        body {
-            background-color: #121826;
-            color: #e0e6ff;
-        }
-        .stApp {
-            background-color: #121826;
-            color: #e0e6ff;
-        }
-        h1, h2, h3 {
-            color: #7df9ff; /* neon cyan titles */
-        }
-        .block-container {
-            padding-top: 1rem;
-            padding-bottom: 0rem;
-        }
-        .stMetric {
-            background-color: #1e2433;
-            border-radius: 15px;
-            padding: 10px;
-            color: #ff6ec7; /* pink metric values */
-        }
-        hr {
-            border: 1px solid #7df9ff;
-        }
+        body, .stApp {{
+            background-color: {bg_color};
+            color: {text_color};
+            font-family: 'Poppins', sans-serif;
+        }}
+        .banner {{
+            background: {gradient_bg};
+            color: white;
+            text-align: center;
+            padding: 25px 10px;
+            border-radius: 16px;
+            margin-bottom: 25px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+        }}
+        .banner h1 {{
+            font-size: 2.6rem;
+            font-weight: 900;
+        }}
+        .stButton>button {{
+            width: 100%;
+            max-width: 250px;
+            height: 52px;
+            font-size: 17px;
+            font-weight: 700;
+            border-radius: 14px;
+            border: none;
+            color: white !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }}
+        .start-btn {{ background: linear-gradient(90deg, #3B82F6, #1D4ED8); }}
+        .pause-btn {{ background: linear-gradient(90deg, #F59E0B, #B45309); }}
+        .stop-btn {{ background: linear-gradient(90deg, #DC2626, #991B1B); }}
+        .metric-box {{
+            background-color: {card_bg};
+            border: 2px solid {border};
+            border-radius: 16px;
+            padding: 18px 20px;
+            margin-bottom: 12px;
+            text-align: center;
+            font-weight: 700;
+        }}
+        .metric-value {{
+            color: {accent};
+            font-size: 22px;
+            font-weight: 800;
+        }}
+        .status-bar {{
+            background: {accent};
+            border-radius: 12px;
+            padding: 15px;
+            text-align: center;
+            font-weight: 700;
+            color: white;
+            font-size: 20px;
+        }}
     </style>
 """, unsafe_allow_html=True)
 
+# -------------------- HEADER --------------------
+st.markdown("""
+    <div class='banner'>
+        <h1>🎵 Gesture-Based Smart Volume Controller</h1>
+        <p>Use AI-driven hand tracking to control system volume in real time.</p>
+    </div>
+""", unsafe_allow_html=True)
 
-st.title("🎵 Smart Hand Gesture Volume Controller")
-st.write("Control your system volume smoothly using your hand — redesigned in a new light theme!")
+# -------------------- SESSION STATE --------------------
+if "run_camera" not in st.session_state:
+    st.session_state.run_camera = False
+if "pause_camera" not in st.session_state:
+    st.session_state.pause_camera = False
+if "chart_data" not in st.session_state:
+    st.session_state.chart_data = pd.DataFrame(columns=["Frame", "Distance", "Volume"])
+if "frame_count" not in st.session_state:
+    st.session_state.frame_count = 0
+if "last_update" not in st.session_state:
+    st.session_state.last_update = 0
 
+# -------------------- BUTTONS --------------------
+col_btn1, col_btn2, col_btn3 = st.columns(3)
+with col_btn1:
+    if st.button("▶️ Start Webcam", use_container_width=True):
+        st.session_state.run_camera = True
+        st.session_state.pause_camera = False
+        st.toast("🎥 Webcam Started Successfully")
+
+with col_btn2:
+    if st.button("⏸️ Pause", use_container_width=True):
+        if st.session_state.run_camera:
+            st.session_state.pause_camera = True
+            st.toast("⏸️ Webcam Paused")
+
+with col_btn3:
+    if st.button("⛔ Stop Webcam", use_container_width=True):
+        st.session_state.run_camera = False
+        st.session_state.pause_camera = False
+        st.toast("🛑 Webcam Stopped")
+
+st.write("---")
+
+# -------------------- DASHBOARD --------------------
 col1, col2 = st.columns([3, 2])
-
 with col1:
-    st.header("📹 Camera Feed")
+    st.header("📹 Live Camera Feed")
     frame_placeholder = st.empty()
-
 with col2:
-    st.header("⚙️ Live Control Panel")
-    gesture_placeholder = st.empty()
-    distance_placeholder = st.empty()
-    volume_display_placeholder = st.empty()
-    st.write("---")
-    mapping_chart_placeholder = st.empty()
+    st.header("📊 Real-Time Gesture Dashboard")
+    gesture_status = st.empty()
+    gesture_display = st.empty()
+    distance_display = st.empty()
+    volume_display = st.empty()
 
+st.write("---")
+st.subheader("📈 Distance & Volume Trend ")
+graph_placeholder = st.empty()
 
-# ---------------- Hand Tracking Setup ----------------
+# -------------------- HAND + AUDIO SETUP --------------------
 mp_hands = mp.solutions.hands
-hand_detector = mp_hands.Hands(static_image_mode=False, max_num_hands=1, 
-                               min_detection_confidence=0.7, min_tracking_confidence=0.5)
+hand_detector = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.7, min_tracking_confidence=0.5)
 mp_draw_utils = mp.solutions.drawing_utils
 FINGER_TIPS = [4, 8, 12, 16, 20]
 
-# ---------------- Volume Control Setup ----------------
 try:
+    pythoncom.CoInitialize()
     speakers = AudioUtilities.GetSpeakers()
     audio_interface = speakers.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
     volume_controller = cast(audio_interface, POINTER(IAudioEndpointVolume))
     VOL_MIN, VOL_MAX, _ = volume_controller.GetVolumeRange()
-    volume_control_enabled = True
-except Exception as e:
-    st.error(f"Could not initialize volume control. Error: {e}")
-    volume_control_enabled = False
+    volume_enabled = True
+except Exception:
+    VOL_MIN, VOL_MAX = -65.25, 0.0
+    volume_enabled = False
 
+# -------------------- CAMERA FUNCTION --------------------
+def run_camera():
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        st.error("❌ Could not open webcam.")
+        return
 
-# ---------------- Webcam Setup ----------------
-cam = cv2.VideoCapture(0)
-if not cam.isOpened():
-    st.error("Could not open webcam.")
-else:
-    cam.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    while st.session_state.run_camera:
+        if st.session_state.pause_camera:
+            time.sleep(0.1)
+            continue
 
-    mapping_df = pd.DataFrame({
-        'Normalized Distance': range(101),
-        'Volume %': range(101)
-    })
-
-    if 'stop' not in st.session_state:
-        st.session_state.stop = False
-
-    def stop_camera():
-        st.session_state.stop = True
-
-    st.button("🛑 Stop Webcam", on_click=stop_camera)
-
-    while not st.session_state.stop:
-        ret, frame = cam.read()
+        ret, frame = cap.read()
         if not ret:
-            st.warning("Failed to grab frame.")
+            st.warning("⚠️ Failed to grab frame.")
             break
 
         frame = cv2.flip(frame, 1)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = hand_detector.process(frame_rgb)
 
-        landmarks = []
-        gesture_name = "No Hand Detected"
-        distance_mm = 0
-        vol_percent = 0
-        pinch_distance_pixels = 0
+        gesture_name, gesture_icon = "No Hand", "❌"
+        distance_mm, vol_percent = 0, 0
 
         if results.multi_hand_landmarks:
             for hand_landmarks in results.multi_hand_landmarks:
-                for lm in hand_landmarks.landmark:
-                    h, w, _ = frame.shape
-                    cx, cy = int(lm.x * w), int(lm.y * h)
-                    landmarks.append((cx, cy))
-
+                h, w, _ = frame.shape
+                landmarks = [(int(lm.x * w), int(lm.y * h)) for lm in hand_landmarks.landmark]
                 mp_draw_utils.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
-                if len(landmarks) >= 21:
-                    thumb_tip = landmarks[4]
-                    index_tip = landmarks[8]
-                    pinch_distance_pixels = math.hypot(index_tip[0] - thumb_tip[0], index_tip[1] - thumb_tip[1])
-                    
-                    wrist, middle_mcp = landmarks[0], landmarks[9]
-                    ref_dist_pixels = math.hypot(middle_mcp[0] - wrist[0], middle_mcp[1] - wrist[1])
-                    
-                    KNOWN_DISTANCE_MM = 85.0
-                    if ref_dist_pixels > 0:
-                        mm_per_pixel = KNOWN_DISTANCE_MM / ref_dist_pixels
-                        distance_mm = pinch_distance_pixels * mm_per_pixel
+                thumb_tip, index_tip = landmarks[4], landmarks[8]
+                pinch_distance = math.hypot(index_tip[0] - thumb_tip[0], index_tip[1] - thumb_tip[1])
+                ref_dist = math.hypot(landmarks[9][0] - landmarks[0][0], landmarks[9][1] - landmarks[0][1])
+                if ref_dist > 0:
+                    distance_mm = (pinch_distance / ref_dist) * 85
 
-                    fingers_up = [1 if landmarks[FINGER_TIPS[0]][0] < landmarks[FINGER_TIPS[0] - 1][0] else 0]
-                    for i in range(1, 5):
-                        fingers_up.append(1 if landmarks[FINGER_TIPS[i]][1] < landmarks[FINGER_TIPS[i] - 2][1] else 0)
-                    
-                    num_fingers = fingers_up.count(1)
+                # Draw a smooth green line between thumb and index
+                cv2.line(frame, thumb_tip, index_tip, (0, 255, 0), 4)
+                cv2.circle(frame, thumb_tip, 10, (0, 255, 0), cv2.FILLED)
+                cv2.circle(frame, index_tip, 10, (0, 255, 0), cv2.FILLED)
 
-                    if pinch_distance_pixels < 30:
-                        gesture_name = "Pinch"
-                    elif num_fingers == 5:
-                        gesture_name = "Open Hand"
-                    elif num_fingers == 0:
-                        gesture_name = "Fist"
-                    else:
-                        gesture_name = f"{num_fingers} Fingers Up"
+                vol_percent = int(np.interp(pinch_distance, [20, 200], [0, 100]))
+                if volume_enabled:
+                    vol_level = np.interp(vol_percent, [0, 100], [VOL_MIN, VOL_MAX])
+                    volume_controller.SetMasterVolumeLevel(vol_level, None)
 
-                    # 🎨 CHANGE 2: New Purple Line Color
-                    pinch_color = (180, 0, 255)
-
-                    if pinch_distance_pixels > 20:
-                        volume_level = np.interp(pinch_distance_pixels, [20, 200], [VOL_MIN, VOL_MAX])
-                        vol_percent = int(np.interp(pinch_distance_pixels, [20, 200], [0, 100]))
-                        
-                        if volume_control_enabled:
-                            volume_controller.SetMasterVolumeLevel(volume_level, None)
-
-                    cv2.circle(frame, thumb_tip, 10, pinch_color, cv2.FILLED)
-                    cv2.circle(frame, index_tip, 10, pinch_color, cv2.FILLED)
-                    cv2.line(frame, thumb_tip, index_tip, pinch_color, 3)
-
-        # 🎨 CHANGE 3: Volume Bar – Purple Gradient with Soft Glow
-        vol_bar_pos = np.interp(vol_percent, [0, 100], [400, 150])
-        bar_color = (150, 0, 255)
-        cv2.rectangle(frame, (50, 150), (85, 400), (220, 220, 220), 2)
-        cv2.rectangle(frame, (50, int(vol_bar_pos)), (85, 400), bar_color, cv2.FILLED)
-        cv2.putText(frame, f'{vol_percent}%', (40, 450), cv2.FONT_HERSHEY_SIMPLEX, 1, (120, 0, 255), 3)
+                if pinch_distance < 30:
+                    gesture_name, gesture_icon = "Pinch (Mute)", "🤏"
+                elif vol_percent > 90:
+                    gesture_name, gesture_icon = "Open Hand (Max)", "🖐️"
+                elif vol_percent < 10:
+                    gesture_name, gesture_icon = "Fist (Min)", "✊"
+                else:
+                    gesture_name, gesture_icon = "Adjusting", "✋"
 
         frame_placeholder.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), channels="RGB")
-        gesture_placeholder.metric("Gesture", gesture_name)
-        distance_placeholder.metric("Pinch Distance", f"{distance_mm:.2f} mm")
-        volume_display_placeholder.metric("Volume", f"{vol_percent} %")
+        gesture_status.markdown(f"<div class='status-bar'>{gesture_icon} {gesture_name}</div>", unsafe_allow_html=True)
+        gesture_display.markdown(f"<div class='metric-box'>🖐️ Gesture<br><span class='metric-value'>{gesture_name}</span></div>", unsafe_allow_html=True)
+        distance_display.markdown(f"<div class='metric-box'>📏 Distance<br><span class='metric-value'>{distance_mm:.2f} mm</span></div>", unsafe_allow_html=True)
+        volume_display.markdown(f"<div class='metric-box'>🔊 Volume<br><span class='metric-value'>{vol_percent}%</span></div>", unsafe_allow_html=True)
 
-        # 🎨 CHANGE 4: Chart Colors (Lavender Line + Pink Dot)
-        normalized_dist = np.interp(pinch_distance_pixels, [20, 200], [0, 100])
-        current_pos_df = pd.DataFrame({'Normalized Distance': [normalized_dist], 'Volume %': [vol_percent]})
+        # Smooth Graph (update every 0.5s to prevent flicker)
+        now = time.time()
+        if now - st.session_state.last_update > 0.5:
+            st.session_state.frame_count += 1
+            new_row = pd.DataFrame([[st.session_state.frame_count, distance_mm, vol_percent]],
+                                   columns=["Frame", "Distance", "Volume"])
+            st.session_state.chart_data = pd.concat([st.session_state.chart_data, new_row]).tail(60)
 
-        line_chart = alt.Chart(mapping_df).mark_line(color='#b19cd9').encode(
-            x='Normalized Distance',
-            y='Volume %'
-        )
+            df = st.session_state.chart_data
+            base = alt.Chart(df).encode(x='Frame')
 
-        point_chart = alt.Chart(current_pos_df).mark_circle(size=150, color='#ff66b2').encode(
-            x='Normalized Distance',
-            y='Volume %'
-        )
+            line1 = base.mark_line(color='#3B82F6', strokeWidth=3).encode(y='Distance')
+            line2 = base.mark_line(color='#EF4444', strokeWidth=3, strokeDash=[4, 4]).encode(y='Volume')
+            combined_chart = (line1 + line2).properties(height=350, title="📊 Distance & Volume Trend (Smooth)")
+            graph_placeholder.altair_chart(combined_chart, use_container_width=True)
 
-        final_chart = (line_chart + point_chart).properties(
-            title='Distance vs Volume Mapping'
-        ).interactive()
+            st.session_state.last_update = now
 
-        mapping_chart_placeholder.altair_chart(final_chart, use_container_width=True)
-
-    cam.release()
+    cap.release()
     cv2.destroyAllWindows()
-    st.success("✅ Webcam feed stopped successfully.")
+
+# -------------------- RUN CAMERA --------------------
+if st.session_state.run_camera:
+    run_camera()
+else:
+    st.info("👋 Click **Start Webcam** to begin hand gesture detection.")
